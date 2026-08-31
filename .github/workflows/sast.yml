@@ -1,0 +1,77 @@
+name: SAST Scan
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+  workflow_dispatch:
+
+jobs:
+  sast:
+    name: Static Analysis (Bandit + Semgrep)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install project + scanning tools
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install bandit semgrep
+
+      - name: Create reports directory
+        run: mkdir -p reports
+
+      - name: Run Bandit
+        run: |
+          bandit -r . \
+            --exclude ./.git,./reports \
+            -f txt -o reports/bandit-report.txt || true
+          bandit -r . \
+            --exclude ./.git,./reports \
+            -f json -o reports/bandit-report.json || true
+
+      - name: Run Semgrep
+        run: |
+          semgrep scan --config auto \
+            --exclude reports \
+            --text --output reports/semgrep-report.txt || true
+          semgrep scan --config auto \
+            --exclude reports \
+            --json --output reports/semgrep-report.json || true
+
+      - name: Build combined findings summary
+        run: |
+          {
+            echo "# SAST Findings Summary"
+            echo ""
+            echo "Generated: $(date -u)"
+            echo ""
+            echo "## Bandit"
+            echo '```'
+            cat reports/bandit-report.txt || echo "No Bandit output."
+            echo '```'
+            echo ""
+            echo "## Semgrep"
+            echo '```'
+            cat reports/semgrep-report.txt || echo "No Semgrep output."
+            echo '```'
+          } > reports/sast-summary.md
+
+      - name: Add report to workflow summary
+        run: cat reports/sast-summary.md >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload SAST reports as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: sast-reports
+          path: reports/
+          retention-days: 30

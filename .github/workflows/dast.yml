@@ -56,7 +56,6 @@ jobs:
           fail_action: false
           allow_issue_writing: false
 
-          artifact_name: "zap-baseline-report"
 
       - name: Move ZAP report into reports folder
         run: |
